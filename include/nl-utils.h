@@ -42,6 +42,7 @@
 
 #include "vswitch-idl.h"
 #include "uuid.h"
+#include "vrf-utils.h"
 
 #define MAX_BUFFER_LENGTH 64
 /**************************************************************************
@@ -53,12 +54,6 @@ struct setns_info
     char intf_name[MAX_BUFFER_LENGTH];
 };
 
-struct vrf_sock_params
-{
-    int family;
-    int type;
-    int protocol;
-};
 /************************************************************************
 * moves an interface from another namespace to default_vrf namespace
 *

@@ -50,6 +50,7 @@
 #include "vswitch-idl.h"
 #include "openswitch-idl.h"
 #include "nl-utils.h"
+#include "vrf-utils.h"
 #include "openvswitch/vlog.h"
 
 VLOG_DEFINE_THIS_MODULE(ops_utils);
