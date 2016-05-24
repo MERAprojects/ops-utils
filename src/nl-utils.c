@@ -94,7 +94,7 @@ int  nl_create_vrf_socket(char* vrf_name, struct vrf_sock_params *params)
     VLOG_DBG("socket created. fd = %d in namespace %s", ns_sock, vrf_name);
 
     close(fd_from_ns);
-    return 0;
+    return ns_sock;
 }
 
 /***************************************************************************
@@ -149,7 +149,7 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
     struct rtareq req;
 
     int ns_sock;
-    bool ns_sock_in_use = false;
+    bool rc = false;
     struct sockaddr_nl s_addr;
 
     /* Open FD to set the thread to a namespace */
@@ -170,7 +170,6 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
 
     if (ns_sock < 0) {
         VLOG_ERR("Netlink socket creation failed (%s) in namespace %s",strerror(errno), setns_local_info->from_ns);
-        close(ns_sock);
         close(fd_from_ns);
         return false;
     }
@@ -187,7 +186,6 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
             close(fd_from_ns);
             return false;
         }
-        ns_sock_in_use = true;
     }
 
     VLOG_DBG("Netlink socket created. fd = %d",ns_sock);
@@ -198,7 +196,6 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
     fd = open(ns_path, O_RDONLY);
     if (fd == -1) {
         VLOG_ERR("Unable to open fd for namepsace %s", setns_local_info->from_ns);
-        close(fd);
         close(ns_sock);
         close(fd_from_ns);
         return false;
@@ -232,17 +229,11 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
     if (send(ns_sock, &req, req.n.nlmsg_len, 0) == -1) {
         VLOG_ERR("Netlink failed to set fd %d for interface %s", fd,
                 setns_local_info->intf_name);
-        close(fd);
-        close(ns_sock);
-        close(fd_from_ns);
-        return false;
+        rc = false;
     }
 
     close(fd);
-    if (!ns_sock_in_use)
-    {
-       close(ns_sock);
-    }
+    close(ns_sock);
     close(fd_from_ns);
-    return true;
+    return rc;
 }
