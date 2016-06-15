@@ -37,14 +37,13 @@
 #define __VRF_UTILS_H_
 
 #include "vswitch-idl.h"
+#include "nl-utils.h"
 
-/**************************************************************************
-***************************************************************************/
+#define VRF_STATUS_KEY   "namespace_ready"
+#define VRF_STATUS_VALUE "true"
 struct vrf_sock_params
 {
-    int family;
-    int type;
-    int protocol;
+    struct nl_sock_params nl_params;
 };
 
 /************************************************************************//**
@@ -104,7 +103,7 @@ extern const int64_t
 get_vrf_table_id_from_uuid(const struct ovsdb_idl *idl, const struct uuid *uuid);
 
 /***************************************************************************
- * Creates a socket by entering the corresponding namespace
+ * Creates a socket by entering the corresponding namespace using id
  *
  * @param[in]  idl       : idl reference to OVSDB
  * @param[in]  table_id  : table_id of the VRF namespace in which the socket
@@ -113,11 +112,11 @@ get_vrf_table_id_from_uuid(const struct ovsdb_idl *idl, const struct uuid *uuid)
  *
  * @return valid fd if sucessful, else 0 on failure
  ***************************************************************************/
-extern int create_vrf_socket(const struct ovsdb_idl *idl, int64_t table_id,
-                             struct vrf_sock_params *params);
+extern int vrf_create_socket_using_id(const struct ovsdb_idl *idl, int64_t table_id,
+                                      struct vrf_sock_params *params);
 
 /***************************************************************************
- * Closes a socket by entering the corresponding namespace
+ * Closes a socket by entering the corresponding namespace using id
  *
  * @param[in]  idl       : idl reference to OVSDB
  * @param[in]  table_id  : table_id of the VRF namespace in which the socket
@@ -127,10 +126,48 @@ extern int create_vrf_socket(const struct ovsdb_idl *idl, int64_t table_id,
  * @return 0 if sucessful, else negative value on failure
  ***************************************************************************/
 extern int
-close_vrf_socket(const struct ovsdb_idl *idl, int64_t table_id,
-                 int socket_fd);
+vrf_close_socket_using_id (const struct ovsdb_idl *idl, int64_t table_id,
+                           int socket_fd);
 
+/***************************************************************************
+ * enters a namespace with the given vrf name
+ *
+ * @param[in]  vrf_name  : the namespace name corresponding to given vrf.
+ *
+ * @return 0 if sucessful, else negative value on failure
+ ***************************************************************************/
+int vrf_setns_with_name(const char *vrf_name);
 
+/***************************************************************************
+ * returns if the passed vrf name matches with default namespace or not.
+ *
+ * @param[in]  vrf_name  : the namespace name passed
+ *
+ * @return 0 if if default vrf. else 1 if passed name is not a vrf.
+ ***************************************************************************/
+bool is_nondefault_vrf(const char *vrf_name);
+
+/***************************************************************************
+* creates an socket by entering the corresponding namespace by spawning the
+* thread.
+*
+* @param[in]  vrf_name : this is the namespace in which socket to be opened.
+* @param[in]  socket_fd : fd of the socket to close.
+*
+* @return valid true if sucessful, else false on failure
+***************************************************************************/
+int  vrf_create_socket (char* vrf_name, struct vrf_sock_params *params);
+
+/***************************************************************************
+ * Verifies if the VRF namespace / device is configuration ready
+ *
+ * @param[in]  idl  : the ovsdb_idl structure corresponding to vrf
+ * @param[in]  vrf_name : this is the namespace in which search to be performed.
+ *
+ * @return true if ready, else false.
+ ***************************************************************************/
+bool
+vrf_is_ready(const struct ovsdb_idl *idl, char *vrf_name);
 #endif /* __VRF_UTILS_H_ */
 /** @} end of group vrf_utils_public */
 /** @} end of group vrf_utils */

@@ -16,12 +16,12 @@
 */
 
 /*************************************************************************//**
- * @ingroup ops_utils
- * This module contains the DEFINES and functions that comprise the ops-utils
+ * @ingroup nl_utils
+ * This module contains the DEFINES and functions that comprise the nl-utils
  * library.
  *
  * @file
- * Source file for ops-utils library.
+ * Source file for nl-utils library.
  *
  ****************************************************************************/
 
@@ -30,7 +30,6 @@
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h>
-#include <net/if.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,131 +46,207 @@
 #include <dynamic-string.h>
 
 #include <assert.h>
-#include "vswitch-idl.h"
 #include "openswitch-idl.h"
 #include "nl-utils.h"
-#include "vrf-utils.h"
 #include "openvswitch/vlog.h"
 
-VLOG_DEFINE_THIS_MODULE(ops_utils);
+VLOG_DEFINE_THIS_MODULE(nl_utils);
+
 /***************************************************************************
-* creates an socket by entering the corresponding namespace
+* type of action to be performed inside the thread
 *
-* @param[in]  vrf_name : this is the namespace in which socket to be opened.
+* @param[in]  tdata : struct nlutils_op_data parameter for parsing
+*
+* executes desired operation and stores the result in tdata itself
+***************************************************************************/
+void nl_perform_socket_operation(struct nlutils_op_data *tdata)
+{
+   int ns_sock = -1;
+   switch (tdata->operation)
+   {
+       case NLUTILS_SOCKET_CREATE:
+           /* Open a socket in the namespace set by thread */
+           ns_sock = socket(tdata->params.s->family,
+                            tdata->params.s->type,
+                            tdata->params.s->protocol);
+
+           if (ns_sock < 0) {
+               VLOG_ERR("socket creation failed (%s) in namespace %s",
+                                      strerror(errno), tdata->ns_name);
+           }
+           tdata->result=ns_sock;
+           break;
+       case NLUTILS_IFINDEX_TO_NAME:
+           if_indextoname(tdata->params.in.ifindex, tdata->params.in.ifname);
+           tdata->result=0;
+           break;
+       case NLUTILS_IFNAME_TO_INDEX:
+           tdata->params.ni.ifindex = if_nametoindex(tdata->params.ni.ifname);
+           tdata->result=0;
+           break;
+       default:
+           VLOG_ERR("unsupported op %d in ns name %s",
+                                       tdata->operation, tdata->ns_name);
+           break;
+   }
+   return;
+}
+
+
+/***************************************************************************
+ * check if the ns_name is default namespace or not.
+ *
+ * @param[in]  ns_name  : the namespace name to used for comparision.
+ *
+ * @return 0 if default namespace, else 1
+ ***************************************************************************/
+static bool nl_is_nondefault_ns(const char *ns_name)
+{
+     if (!ns_name
+         || strncmp(ns_name, SWITCH_NAMESPACE, strlen(SWITCH_NAMESPACE)) == 0)
+     {
+        /* DEFAULT namespace. ignore entering this namespace again */
+        return 0;
+     }
+     return 1;
+}
+
+/***************************************************************************
+* creates an socket by entering the corresponding namespace by spawning the
+* thread.
+*
+* @param[in]  ns_name : this is the namespace in which socket to be opened.
 * @param[in]  socket_fd : fd of the socket to close.
 *
 * @return valid true if sucessful, else false on failure
 ***************************************************************************/
-int  nl_create_vrf_socket(char* vrf_name, struct vrf_sock_params *params)
+int  nl_create_ns_socket(char* ns_name, struct nl_sock_params *params)
 {
-    char set_ns[MAX_BUFFER_LENGTH] = {0};
-    int  fd_from_ns;
+    struct nlutils_op_data tdata;
+    bool non_default_ns = nl_is_nondefault_ns(ns_name);
 
-    int ns_sock;
-
-    /* Open FD to set the thread to a namespace */
-    snprintf(set_ns, sizeof(set_ns), "/var/run/netns/%s", vrf_name);
-    fd_from_ns = open(set_ns, O_RDONLY);
-    if (fd_from_ns == -1) {
-        VLOG_ERR("Unable to open fd for namepsace %s", vrf_name);
-        return -1;
+    snprintf(tdata.ns_name, MAX_BUFFER_SIZE-1, "%s", ns_name);
+    tdata.operation = NLUTILS_SOCKET_CREATE;
+    tdata.params.s = params;
+    if (non_default_ns)
+    {
+        nl_setns_with_name(ns_name);
     }
-    if (setns(fd_from_ns, CLONE_NEWNET) == -1) {
-        VLOG_ERR("Unable to set %s namespace to the thread", vrf_name);
-        close(fd_from_ns);
-        return -1;
-    }
-    /* Open a socket in the namespace set by thread */
-    ns_sock = socket(params->family, params->type, params->protocol);
-
-    if (ns_sock < 0) {
-        VLOG_ERR("socket creation failed (%s) in namespace %s",strerror(errno), vrf_name);
-        close(fd_from_ns);
-        close(ns_sock);
-        return -1;
+    nl_perform_socket_operation(&tdata);
+    if (non_default_ns)
+    {
+        nl_setns_with_name(SWITCH_NAMESPACE);
     }
 
-    VLOG_DBG("socket created. fd = %d in namespace %s", ns_sock, vrf_name);
-
-    close(fd_from_ns);
-    return ns_sock;
+    return tdata.result;
 }
 
 /***************************************************************************
 * creates an socket by entering the corresponding namespace
 *
-* @param[in]  vrf_name : this is the namespace in which socket to be opened.
+* @param[in]  ns_name : this is the namespace in which socket to be opened.
 * @param[in]  params : contains socket params to pass to the socket.
 *
 * @return valid fd if sucessful, else 0 on failure
 ***************************************************************************/
-bool nl_close_vrf_socket (char* vrf_name, int socket_fd)
+bool nl_close_ns_socket (char* ns_name, int socket_fd)
 {
-    char set_ns[MAX_BUFFER_LENGTH] = {0};
-    int  fd_from_ns;
-
-
-    /* Open FD to set the thread to a namespace */
-
-    snprintf(set_ns, sizeof(set_ns), "/var/run/netns/%s", vrf_name);
-    fd_from_ns = open(set_ns, O_RDONLY);
-    if (fd_from_ns == -1) {
-        VLOG_ERR("Unable to open fd for namepsace %s", vrf_name);
-        return false;
-    }
-    if (setns(fd_from_ns, CLONE_NEWNET) == -1) {
-        VLOG_ERR("Unable to set %s namespace to the thread", vrf_name);
-        close(fd_from_ns);
-        return false;
-    }
     /* delete the socket created by the thread */
-    close (socket_fd);
+    close(socket_fd);
 
-    VLOG_DBG("socket closed fd = %d in namespace %s", socket_fd, vrf_name);
-    close(fd_from_ns);
+    VLOG_DBG("socket closed fd = %d in namespace %s", socket_fd, ns_name);
 
     return true;
 }
 
+/***************************************************************************
+ * enters a namespace with the given ns name
+ *
+ * @param[in]  ns_name  : the namespace name corresponding to given namespace.
+ *
+ * @return 0 if sucessful, else negative value on failure
+ ***************************************************************************/
+int nl_setns_with_name (const char *ns_name)
+{
+     int fd = -1;
+     char ns_path[MAX_BUFFER_SIZE] = {0};
+
+     if (!nl_is_nondefault_ns(ns_name))
+     {
+         return 0;
+     }
+     strcat(ns_path, "/var/run/netns/");
+     snprintf(ns_path + strlen(ns_path), MAX_BUFFER_SIZE - strlen(ns_path) - 1,
+                                                                 "%s", ns_name);
+     fd = open(ns_path, O_RDONLY);  /* Get descriptor for namespace */
+     if (fd == -1)
+     {
+         VLOG_ERR("%s: namespace does not exist\n", ns_name);
+         return -1;
+     }
+
+     if (setns(fd, CLONE_NEWNET) == -1) /* Join that namespace */
+     {
+         VLOG_ERR("Unable to set namespace to the thread");
+         close(fd);
+         return -1;
+     }
+
+    close(fd);
+    return 0;
+}
+
 /************************************************************************
-* moves an interface from one vrf to another vrf.
+* moves an interface from one namespace to another namespace.
 *
-* @param[in]  setns_local_info : contains from and to vrf names and intf name
+* @param[in]  setns_local_info : contains from and to ns names and intf name
 *
 * @return true if sucessful, else false on failure
 ***************************************************************************/
 bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
 {
-    char ns_path[MAX_BUFFER_LENGTH]= {0};
-    char set_ns[MAX_BUFFER_LENGTH] = {0};
-    int fd, fd_from_ns;
+    char ns_path[MAX_BUFFER_SIZE]= {0};
+    char set_ns[MAX_BUFFER_SIZE] = {0};
+    int fd = -1, fd_from_ns = -1;
     struct rtattr *rta;
     struct rtareq req;
 
-    int ns_sock;
+    int ns_sock = -1;
     bool rc = false;
     struct sockaddr_nl s_addr;
 
-    /* Open FD to set the thread to a namespace */
+    /* open a FD to move the interface */
+    snprintf(ns_path, sizeof(ns_path), "/var/run/netns/%s",
+                                                       setns_local_info->to_ns);
+    fd = open(ns_path, O_RDONLY);
+    if (fd == -1) {
+        VLOG_ERR("Unable to open fd for namepsace %s", setns_local_info->to_ns);
+        goto cleanup;
+    }
 
-    snprintf(set_ns, sizeof(set_ns), "/var/run/netns/%s", setns_local_info->from_ns);
+    /* Open FD to set the namespace */
+
+    snprintf(set_ns, sizeof(set_ns), "/var/run/netns/%s",
+                                                     setns_local_info->from_ns);
     fd_from_ns = open(set_ns, O_RDONLY);
     if (fd_from_ns == -1) {
-        VLOG_ERR("Unable to open fd for namepsace %s", setns_local_info->from_ns);
+        VLOG_ERR("Unable to open fd for namepsace %s",
+                                                     setns_local_info->from_ns);
         return false;
     }
     if (setns(fd_from_ns, CLONE_NEWNET) == -1) {
-        VLOG_ERR("Unable to set %s namespace to the thread", setns_local_info->from_ns);
+        VLOG_ERR("Unable to set %s new namespace", setns_local_info->from_ns);
         close(fd_from_ns);
         return false;
     }
-    /* Open a socket in the namespace set by thread */
+    /* Open a socket in the namespace */
     ns_sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 
     if (ns_sock < 0) {
-        VLOG_ERR("Netlink socket creation failed (%s) in namespace %s",strerror(errno), setns_local_info->from_ns);
+        VLOG_ERR("Netlink socket creation failed (%s) in namespace %s",
+                                    strerror(errno), setns_local_info->from_ns);
         close(fd_from_ns);
-        return false;
+        goto cleanup;
     }
 
     memset((void *) &s_addr, 0, sizeof(s_addr));
@@ -181,25 +256,13 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
 
     if (bind(ns_sock, (struct sockaddr *) &s_addr, sizeof(s_addr)) < 0) {
         if (errno != EADDRINUSE) {
-            VLOG_ERR("Netlink socket bind failed (%s) in namespace %s",strerror(errno), setns_local_info->from_ns);
-            close(ns_sock);
-            close(fd_from_ns);
-            return false;
+            VLOG_ERR("Netlink socket bind failed (%s) in namespace %s",
+                                    strerror(errno), setns_local_info->from_ns);
+            goto cleanup;
         }
     }
 
     VLOG_DBG("Netlink socket created. fd = %d",ns_sock);
-
-    memset(&ns_path[0], 0, MAX_BUFFER_LENGTH);
-    /* open a FD to move the interface */
-    snprintf(ns_path, sizeof(ns_path), "/var/run/netns/%s", setns_local_info->to_ns);
-    fd = open(ns_path, O_RDONLY);
-    if (fd == -1) {
-        VLOG_ERR("Unable to open fd for namepsace %s", setns_local_info->from_ns);
-        close(ns_sock);
-        close(fd_from_ns);
-        return false;
-    }
 
     memset(&req, 0, sizeof(req));
 
@@ -212,11 +275,9 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
     req.i.ifi_index     = if_nametoindex(setns_local_info->intf_name);
 
     if (req.i.ifi_index == 0) {
-        VLOG_ERR("Unable to get ifindex for interface: %s", setns_local_info->intf_name);
-        close(fd);
-        close(ns_sock);
-        close(fd_from_ns);
-        return false;
+        VLOG_ERR("Unable to get ifindex for interface: %s",
+                                                   setns_local_info->intf_name);
+        goto cleanup;
     }
 
     req.i.ifi_change = 0xffffffff;
@@ -231,9 +292,75 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
                 setns_local_info->intf_name);
         rc = false;
     }
-
-    close(fd);
-    close(ns_sock);
-    close(fd_from_ns);
+cleanup:
+    if (setns(fd, CLONE_NEWNET) == -1) {
+        VLOG_ERR("Unable to set %s old namespace", setns_local_info->to_ns);
+    }
+    if (fd != -1) { close(fd);}
+    if (ns_sock != -1) { close(ns_sock);}
+    if (fd_from_ns != -1) {close(fd_from_ns);}
     return rc;
+}
+
+/***************************************************************************
+* Retrieves the if index from the ifname in given namespace
+*
+* @param[in]  if_name : for which the ifindex to be retrieved.
+* @param[in]  ns_name : this is the namespace in which search to be performed.
+*
+* @return valid ifindex if sucessful, else 0 on failure
+***************************************************************************/
+unsigned int nl_if_nametoindex(const char *ns_name, const char* if_name)
+{
+    unsigned int ifindex = 0;
+    struct nlutils_op_data tdata;
+    bool non_default_ns = nl_is_nondefault_ns(ns_name);
+
+    snprintf(tdata.ns_name, MAX_BUFFER_SIZE-1, "%s", ns_name);
+    snprintf(tdata.params.ni.ifname, IFNAMSIZ-1, "%s", if_name);
+    tdata.operation = NLUTILS_IFNAME_TO_INDEX;
+    if (non_default_ns)
+    {
+        nl_setns_with_name(ns_name);
+    }
+    nl_perform_socket_operation(&tdata);
+    ifindex = tdata.params.ni.ifindex;
+    if (non_default_ns)
+    {
+        nl_setns_with_name(SWITCH_NAMESPACE);
+    }
+
+    return ifindex;
+}
+
+/***************************************************************************
+* Retrieves the if name from the ifindex in given namespace
+*
+* @param[in]  ifindex : ifindex for which the ifname to be retrieved.
+* @param[in]  ns_name : this is the namespace in which search to be performed.
+*
+* @param[out]  if_name : this is the ifname corresponding to the ifindex.
+* @return 0 if sucessful, else -1 on failure
+***************************************************************************/
+unsigned int
+nl_if_indextoname (const int ifindex, char *if_name, const char *ns_name)
+{
+    struct nlutils_op_data tdata;
+    bool non_default_ns = nl_is_nondefault_ns(ns_name);
+
+    snprintf(tdata.ns_name, MAX_BUFFER_SIZE-1, "%s", ns_name);
+    tdata.params.in.ifindex = ifindex;
+    tdata.operation = NLUTILS_IFINDEX_TO_NAME;
+    if (non_default_ns)
+    {
+        nl_setns_with_name(ns_name);
+    }
+    nl_perform_socket_operation(&tdata);
+    snprintf(if_name, IFNAMSIZ-1, "%s", tdata.params.in.ifname);
+    if (non_default_ns)
+    {
+        nl_setns_with_name(SWITCH_NAMESPACE);
+    }
+
+    return 0;
 }
