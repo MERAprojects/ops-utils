@@ -229,3 +229,222 @@ ops_sort(const struct shash *sh, void *ptr_func_sort,
     }
     return ret_val;
 }
+
+/******************************************************************************
+ * Setter function for tag column of port table
+ *
+ * @param[in]  vlan_id  : vlan id to be set for tag column of port table
+ * @param[in]  port_row : port table record for which tag has to be set
+ * @param[in]  idl      : pointer to ovsdb handler
+ *
+ * @return true for success, else false on failure
+ *****************************************************************************/
+bool ops_port_set_tag(int vlan_id,
+                      const struct ovsrec_port *port_row,
+                      struct ovsdb_idl *idl)
+{
+    const struct ovsrec_vlan *vlan_row = NULL;
+    bool ret_val = false;
+
+    if ((port_row != NULL ) && (idl != NULL)) {
+        if (vlan_id) {
+            vlan_row = (const struct ovsrec_vlan *)
+                        ops_get_vlan_by_id(vlan_id, idl);
+            if(vlan_row != NULL) {
+                ret_val = true;
+            }
+        }
+        else {
+            ret_val = true;
+        }
+
+        if(ret_val) {
+            ovsrec_port_set_vlan_tag(port_row, vlan_row);
+        }
+    }
+
+    return ret_val;
+}
+
+/******************************************************************************
+ * Setter function for trunk column of port table
+ *
+ * @param[in]  trunk_vlan_ids   : pointer to array conataining trunked VLANs
+ * @param[in]  trunk_vlan_count : count of trunk VLANs
+ * @param[in]  port_row         : port table record for which trunked VLANs
+ *                                record has to be set
+ * @param[in]  idl              : pointer to ovsdb handler
+ *
+ * @return true for success, else false on failure
+ *****************************************************************************/
+bool ops_port_set_trunks(int64_t *trunk_vlan_ids,
+                         int trunk_vlan_count,
+                         const struct ovsrec_port *port_row,
+                         struct ovsdb_idl *idl)
+{
+    const struct ovsrec_vlan *vlan_row = NULL;
+    struct ovsrec_vlan **vlan_trunks = NULL;
+    bool ret_val = false;
+    int index;
+
+    if ((port_row != NULL) && (idl != NULL)) {
+        vlan_trunks = xmalloc(sizeof(struct ovsrec_vlan *)*trunk_vlan_count);
+        if(vlan_trunks != NULL) {
+            for (index = 0; index < trunk_vlan_count; index++) {
+                vlan_row = (const struct ovsrec_vlan *)
+                            ops_get_vlan_by_id(trunk_vlan_ids[index], idl);
+                if(vlan_row != NULL) {
+                    vlan_trunks[index] = (struct ovsrec_vlan *)vlan_row;
+                    ret_val = true;
+                }
+                else {
+                    ret_val = false;
+                    break;
+                }
+            }
+
+            if(trunk_vlan_count == 0) {
+                ret_val = true;
+            }
+
+            if(ret_val == true) {
+                ovsrec_port_set_vlan_trunks(port_row, vlan_trunks,
+                                            (size_t)trunk_vlan_count);
+            }
+
+            free(vlan_trunks);
+            vlan_trunks = NULL;
+        }
+    }
+
+    return ret_val;
+}
+
+/******************************************************************************
+ * Setter function for vlan column of mac table
+ *
+ * @param[in]  vlan_id  : vlan id to be set for vlan column in mac table
+ * @param[in]  mac_row  : mac table record for which vlan has to set
+ * @param[in]  idl      : pointer to ovsdb handler
+ *
+ * @return true for success, else false on failure
+ *****************************************************************************/
+bool ops_mac_set_vlan(int64_t vlan_id,
+                      const struct ovsrec_mac *mac_row,
+                      struct ovsdb_idl *idl)
+{
+    const struct ovsrec_vlan *vlan_row = NULL;
+    bool ret_val = false;
+
+    if ((mac_row != NULL) && (idl != NULL)) {
+        if (vlan_id) {
+            vlan_row = (const struct ovsrec_vlan *)
+                        ops_get_vlan_by_id(vlan_id, idl);
+            if(vlan_row != NULL) {
+                ret_val = true;
+            }
+        }
+        else {
+            ret_val = true;
+        }
+
+        if(ret_val) {
+            ovsrec_mac_set_mac_vlan(mac_row, vlan_row);
+        }
+    }
+
+    return ret_val;
+}
+
+/******************************************************************************
+ * Getter function for tag column of port table
+ *
+ * @param[in]  port_row : port table record for which tag has to be fetched
+ * @param[in]  idl      : pointer to ovsdb handler
+ *
+ * @return vlan identifier
+ *****************************************************************************/
+int ops_port_get_tag(const struct ovsrec_port *port_row)
+{
+    int vlan_id = 0;
+
+    if (port_row != NULL) {
+        if (port_row->vlan_tag != NULL) {
+            vlan_id = port_row->vlan_tag->id;
+        }
+    }
+
+    return vlan_id;
+}
+
+/******************************************************************************
+ * Getter function for trunk column of port table
+ *
+ * @param[in]  port_row : port table record for which trunk VLAN has to be
+ *                        fetched
+ * @param[in]  index    : index of the trunked VLAN
+ * @param[in]  idl      : pointer to ovsdb handler
+ *
+ * @return vlan identifier
+ *****************************************************************************/
+int ops_port_get_trunks(const struct ovsrec_port *port_row,
+                        int index)
+{
+    int vlan_id = 0;
+
+    if (port_row != NULL) {
+        if ((index >= 0) && (index < port_row->n_vlan_trunks)) {
+            if (port_row->vlan_trunks != NULL) {
+                if (port_row->vlan_trunks[index] != NULL) {
+                    vlan_id = port_row->vlan_trunks[index]->id;
+                }
+            }
+        }
+    }
+
+    return vlan_id;
+}
+
+/******************************************************************************
+ * Getter function for vlan column of mac table
+ *
+ * @param[in]  port_row : mac table record for which vlan has to be fetched
+ * @param[in]  idl      : pointer to ovsdb handler
+ *
+ * @return vlan identifier
+ *****************************************************************************/
+int ops_mac_get_vlan(const struct ovsrec_mac *mac_row)
+{
+    int vlan_id = 0;
+
+    if (mac_row != NULL) {
+        if (mac_row->mac_vlan != NULL) {
+            vlan_id = mac_row->mac_vlan->id;
+        }
+    }
+
+    return vlan_id;
+}
+
+/******************************************************************************
+ * Setter function for tag column of port table
+ *
+ * @param[in]  vlan_id  : vlan id to be set for tag column of port table
+ *
+ * @return vlan_row for the vlan_id if found, else NULL
+ *****************************************************************************/
+const struct ovsrec_vlan * ops_get_vlan_by_id(int vlan_id,
+                                              struct ovsdb_idl *idl)
+{
+    const struct ovsrec_vlan *vlan_row = NULL;
+
+    if(idl != NULL) {
+        OVSREC_VLAN_FOR_EACH (vlan_row, idl) {
+            if(vlan_id == vlan_row->id) {
+                break;
+            }
+        }
+    }
+
+    return vlan_row;
+}
