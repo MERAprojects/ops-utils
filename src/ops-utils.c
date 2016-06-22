@@ -250,7 +250,7 @@ bool ops_port_set_tag(int vlan_id,
     if ((port_row != NULL ) && (idl != NULL)) {
         if (vlan_id != 0) {
             ovsrec_port_set_tag(port_row, &tag, 1);
-            vlan_row = ops_get_vlan_by_id(vlan_id, idl);
+            vlan_row = (const struct ovsrec_vlan *)ops_get_vlan_by_id(vlan_id, idl);
             if(vlan_row != NULL) {
                 ovsrec_port_set_vlan_tag(port_row, vlan_row);
                 ret_val = true;
@@ -291,7 +291,8 @@ bool ops_port_set_trunks(int64_t *trunk_vlan_ids,
 
         if(vlan_trunks != NULL) {
             for (index = 0; index < trunk_vlan_count; index++) {
-                vlan_row = ops_get_vlan_by_id(trunk_vlan_ids[index], idl);
+                vlan_row = (const struct ovsrec_vlan *)
+                            ops_get_vlan_by_id(trunk_vlan_ids[index], idl);
                 if(vlan_row != NULL) {
                     vlan_trunks[index] = (struct ovsrec_vlan *)vlan_row;
                     ret_val = true;
@@ -300,6 +301,10 @@ bool ops_port_set_trunks(int64_t *trunk_vlan_ids,
                     ret_val = false;
                     break;
                 }
+            }
+
+            if(trunk_vlan_count == 0) {
+                ret_val = true;
             }
 
             if(ret_val == true) {
@@ -334,7 +339,8 @@ bool ops_mac_set_vlan(int64_t vlan_id,
     if ((mac_row != NULL) && (idl != NULL)) {
         if (vlan_id != 0) {
             ovsrec_mac_set_vlan(mac_row, vlan_id);
-            vlan_row = ops_get_vlan_by_id(vlan_id, idl);
+            vlan_row = (const struct ovsrec_vlan *)
+                        ops_get_vlan_by_id(vlan_id, idl);
             if(vlan_row != NULL) {
                 ovsrec_mac_set_mac_vlan(mac_row, vlan_row);
                 ret_val = true;
