@@ -39,6 +39,7 @@
 #include <linux/rtnetlink.h>
 #include <fcntl.h>
 #include <sched.h>
+#include <stdbool.h>
 #include <net/if.h>
 
 #define MAX_BUFFER_SIZE        128
@@ -164,6 +165,12 @@ void nl_perform_socket_operation(struct nlutils_op_data *tdata);
  ***************************************************************************/
 int nl_setns_with_name(const char *ns_name);
 
+/***************************************************************************
+ * enters mgmt OOBM namespace
+ *
+ * @return 0 if sucessful, else negative value on failure
+ ***************************************************************************/
+int nl_setns_oobm(void);
 #endif /* __NETLINK_UTILS_H_ */
 /** @} end of group nl_utils_public */
 /** @} end of group nl_utils */

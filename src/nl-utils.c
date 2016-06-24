@@ -171,23 +171,20 @@ int nl_setns_with_name (const char *ns_name)
      int fd = -1;
      char ns_path[MAX_BUFFER_SIZE] = {0};
 
-     if (!nl_is_nondefault_ns(ns_name))
-     {
-         return 0;
-     }
      strcat(ns_path, "/var/run/netns/");
      snprintf(ns_path + strlen(ns_path), MAX_BUFFER_SIZE - strlen(ns_path) - 1,
                                                                  "%s", ns_name);
      fd = open(ns_path, O_RDONLY);  /* Get descriptor for namespace */
      if (fd == -1)
      {
-         VLOG_ERR("%s: namespace does not exist\n", ns_name);
+         VLOG_ERR("%s: namespace does not exist, errno %d\n", ns_name, errno);
          return -1;
      }
 
      if (setns(fd, CLONE_NEWNET) == -1) /* Join that namespace */
      {
-         VLOG_ERR("Unable to set namespace to the thread");
+         VLOG_ERR("Unable to set namespace %s in the thread, error %d",
+                    ns_name, errno);
          close(fd);
          return -1;
      }
@@ -210,6 +207,7 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
     int fd = -1, fd_from_ns = -1;
     struct rtattr *rta;
     struct rtareq req;
+    int ifindex;
 
     int ns_sock = -1;
     bool rc = false;
@@ -220,7 +218,8 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
                                                        setns_local_info->to_ns);
     fd = open(ns_path, O_RDONLY);
     if (fd == -1) {
-        VLOG_ERR("Unable to open fd for namepsace %s", setns_local_info->to_ns);
+        VLOG_ERR("Unable to open fd for namepsace %s, errno %d",
+                       setns_local_info->to_ns, errno);
         goto cleanup;
     }
 
@@ -230,22 +229,30 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
                                                      setns_local_info->from_ns);
     fd_from_ns = open(set_ns, O_RDONLY);
     if (fd_from_ns == -1) {
-        VLOG_ERR("Unable to open fd for namepsace %s",
-                                                     setns_local_info->from_ns);
-        return false;
+        VLOG_ERR("Unable to open fd for namepsace %s errno %d",
+                                             setns_local_info->from_ns, errno);
+        goto cleanup;
     }
-    if (setns(fd_from_ns, CLONE_NEWNET) == -1) {
-        VLOG_ERR("Unable to set %s new namespace", setns_local_info->from_ns);
-        close(fd_from_ns);
-        return false;
+    if (nl_is_nondefault_ns(setns_local_info->from_ns) &&
+              nl_setns_with_name(setns_local_info->from_ns)) {
+        VLOG_ERR("Unable to set %s new namespace, errno %d",
+                                       setns_local_info->from_ns, errno);
+        goto cleanup;
     }
     /* Open a socket in the namespace */
     ns_sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    ifindex = if_nametoindex(setns_local_info->intf_name);
+
+    if (nl_is_nondefault_ns(setns_local_info->from_ns) &&
+              nl_setns_with_name(SWITCH_NAMESPACE)) {
+        VLOG_ERR("Unable to set %s old namespace, errno %d",
+                                      setns_local_info->to_ns, errno);
+        goto cleanup;
+    }
 
     if (ns_sock < 0) {
         VLOG_ERR("Netlink socket creation failed (%s) in namespace %s",
                                     strerror(errno), setns_local_info->from_ns);
-        close(fd_from_ns);
         goto cleanup;
     }
 
@@ -272,14 +279,15 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
     req.n.nlmsg_flags   = NLM_F_REQUEST;
 
     req.i.ifi_family    = AF_UNSPEC;
-    req.i.ifi_index     = if_nametoindex(setns_local_info->intf_name);
+    req.i.ifi_index     = ifindex;
 
     if (req.i.ifi_index == 0) {
-        VLOG_ERR("Unable to get ifindex for interface: %s",
-                                                   setns_local_info->intf_name);
+        VLOG_ERR("Unable to get ifindex for interface: %s, errno %d",
+                                          setns_local_info->intf_name, errno);
         goto cleanup;
     }
 
+    rc = true;
     req.i.ifi_change = 0xffffffff;
     rta = (struct rtattr *)(((char *) &req) + NLMSG_ALIGN(req.n.nlmsg_len));
     rta->rta_type = IFLA_NET_NS_FD;
@@ -288,14 +296,11 @@ bool nl_move_intf_to_vrf (struct setns_info *setns_local_info)
     memcpy(RTA_DATA(rta), &fd, sizeof(fd));
 
     if (send(ns_sock, &req, req.n.nlmsg_len, 0) == -1) {
-        VLOG_ERR("Netlink failed to set fd %d for interface %s", fd,
-                setns_local_info->intf_name);
+        VLOG_ERR("Netlink failed to set fd %d for interface %s, errno %d", fd,
+                 setns_local_info->intf_name, errno);
         rc = false;
     }
 cleanup:
-    if (setns(fd, CLONE_NEWNET) == -1) {
-        VLOG_ERR("Unable to set %s old namespace", setns_local_info->to_ns);
-    }
     if (fd != -1) { close(fd);}
     if (ns_sock != -1) { close(ns_sock);}
     if (fd_from_ns != -1) {close(fd_from_ns);}
@@ -362,5 +367,33 @@ nl_if_indextoname (const int ifindex, char *if_name, const char *ns_name)
         nl_setns_with_name(SWITCH_NAMESPACE);
     }
 
+    return 0;
+}
+
+/***************************************************************************
+ * enters OOBM namespace
+ *
+ * @return 0 if sucessful, else negative value on failure
+ ***************************************************************************/
+int nl_setns_oobm (void)
+{
+    int fd = -1;
+    char ns_path[MAX_BUFFER_SIZE] = {0};
+
+    snprintf(ns_path, MAX_BUFFER_SIZE, "/proc/1/ns/net");
+    fd = open(ns_path, O_RDONLY);
+    if (fd == -1)
+    {
+        VLOG_ERR("Entering mgmt OOBM namespace: errno %d", errno);
+        return -1;
+    }
+
+    if (setns(fd, CLONE_NEWNET) == -1) /* Join that namespace */
+    {
+        VLOG_ERR("Unable to enter the mgmt OOBM namespace, errno %d", errno);
+        close(fd);
+        return -1;
+    }
+    close(fd);
     return 0;
 }

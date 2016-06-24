@@ -112,8 +112,9 @@ get_vrf_table_id_from_uuid(const struct ovsdb_idl *idl, const struct uuid *uuid)
  *
  * @return valid fd if sucessful, else 0 on failure
  ***************************************************************************/
-extern int vrf_create_socket_using_id(const struct ovsdb_idl *idl, int64_t table_id,
-                                      struct vrf_sock_params *params);
+extern int vrf_create_socket_using_table_id(const struct ovsdb_idl *idl,
+                                            int64_t table_id,
+                                            struct vrf_sock_params *params);
 
 /***************************************************************************
  * Closes a socket by entering the corresponding namespace using id
@@ -126,37 +127,48 @@ extern int vrf_create_socket_using_id(const struct ovsdb_idl *idl, int64_t table
  * @return 0 if sucessful, else negative value on failure
  ***************************************************************************/
 extern int
-vrf_close_socket_using_id (const struct ovsdb_idl *idl, int64_t table_id,
-                           int socket_fd);
+vrf_close_socket_using_table_id (const struct ovsdb_idl *idl, int64_t table_id,
+                                 int socket_fd);
 
 /***************************************************************************
  * enters a namespace with the given vrf name
  *
+ * @param[in]  idl  : the ovsdb_idl structure corresponding to vrf
  * @param[in]  vrf_name  : the namespace name corresponding to given vrf.
  *
  * @return 0 if sucessful, else negative value on failure
  ***************************************************************************/
-int vrf_setns_with_name(const char *vrf_name);
+int vrf_setns_with_name(const struct ovsdb_idl *idl, const char *vrf_name);
+
+/***************************************************************************
+ * enters a namespace with the given vrf table_id
+ *
+ * @param[in]  idl  : the ovsdb_idl structure corresponding to vrf
+ * @param[in]  table_id  : table_id of the VRF to use for conversion
+ *
+ * @return 0 if sucessful, else negative value on failure
+ ***************************************************************************/
+int vrf_setns_with_table_id(const struct ovsdb_idl *idl, int64_t table_id);
 
 /***************************************************************************
  * returns if the passed vrf name matches with default namespace or not.
  *
- * @param[in]  vrf_name  : the namespace name passed
+ * @param[in]  vrf_ns_name  : the namespace name passed
  *
  * @return 0 if if default vrf. else 1 if passed name is not a vrf.
  ***************************************************************************/
-bool is_nondefault_vrf(const char *vrf_name);
+bool is_nondefault_vrf(const char *vrf_ns_name);
 
 /***************************************************************************
 * creates an socket by entering the corresponding namespace by spawning the
 * thread.
 *
-* @param[in]  vrf_name : this is the namespace in which socket to be opened.
+* @param[in]  vrf_ns_name : this is the namespace in which socket to be opened.
 * @param[in]  socket_fd : fd of the socket to close.
 *
 * @return valid true if sucessful, else false on failure
 ***************************************************************************/
-int  vrf_create_socket (char* vrf_name, struct vrf_sock_params *params);
+int  vrf_create_socket (char* vrf_ns_name, struct vrf_sock_params *params);
 
 /***************************************************************************
  * Verifies if the VRF namespace / device is configuration ready
@@ -168,6 +180,46 @@ int  vrf_create_socket (char* vrf_name, struct vrf_sock_params *params);
  ***************************************************************************/
 bool
 vrf_is_ready(const struct ovsdb_idl *idl, char *vrf_name);
+
+/************************************************************************//**
+ * Returns the VRF namespace name from an ovsdb based on vrf_name.
+ * for default vrf, it always returns swns namespace as it is default.
+ *
+ * @param[in]  idl       : idl reference to OVSDB
+ * @param[in]  vrf_name  : VRF name to use to locate the VRF record
+ * @param[in,out]  vrf_ns_name  : namespace name to be filled from VRF.
+ *
+ * @return 0 if sucessful, else negetive on failure
+ ***************************************************************************/
+int
+get_vrf_ns_from_name(const struct ovsdb_idl *idl, const char* vrf_name,
+                     char* vrf_ns_name);
+/************************************************************************//**
+ * Returns the VRF namespace name from an ovsdb based on table_id.
+ * for table_id 0, it always returns swns namespace as it is default.
+ *
+ * @param[in]  idl       : idl reference to OVSDB
+ * @param[in]  table_id  : VRF table_id to use to locate the VRF record
+ * @param[in,out]  vrf_ns_name  : namespace name to be filled from VRF.
+ *
+ * @return 0 if sucessful, else negetive on failure
+ ***************************************************************************/
+int
+get_vrf_ns_from_table_id(const struct ovsdb_idl *idl, const int64_t table_id,
+                         char* vrf_ns_name);
+
+/************************************************************************//**
+ * Returns the VRF UUID from a ovsdb based on table_id.
+ *
+ * @param[in]  idl       : idl reference to OVSDB
+ * @param[in]  table_id  : VRF table_id to use to locate the VRF record
+ * @param[in,out]  uuid  : UUID structure to be filled from VRF.
+ *
+ * @return UUID if sucessful, else NULL on failure
+ ***************************************************************************/
+const int64_t
+get_vrf_uuid_from_table_id(const struct ovsdb_idl *idl, const int64_t table_id,
+                           struct uuid *uuid);
 #endif /* __VRF_UTILS_H_ */
 /** @} end of group vrf_utils_public */
 /** @} end of group vrf_utils */
