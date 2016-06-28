@@ -245,18 +245,16 @@ bool ops_port_set_tag(int vlan_id,
 {
     const struct ovsrec_vlan *vlan_row = NULL;
     bool ret_val = false;
-    int64_t tag = (int64_t)vlan_id;
 
     if ((port_row != NULL ) && (idl != NULL)) {
         if (vlan_id) {
-            vlan_row = (const struct ovsrec_vlan *)ops_get_vlan_by_id(vlan_id, idl);
+            vlan_row = (const struct ovsrec_vlan *)
+                        ops_get_vlan_by_id(vlan_id, idl);
             if(vlan_row != NULL) {
-                ovsrec_port_set_tag(port_row, &tag, 1);
                 ret_val = true;
             }
         }
         else {
-            ovsrec_port_set_tag(port_row, NULL, 0);
             ret_val = true;
         }
 
@@ -290,10 +288,6 @@ bool ops_port_set_trunks(int64_t *trunk_vlan_ids,
     int index;
 
     if ((port_row != NULL) && (idl != NULL)) {
-
-        ovsrec_port_set_trunks(port_row, trunk_vlan_ids,
-                               (size_t)trunk_vlan_count);
-
         vlan_trunks = xmalloc(sizeof(struct ovsrec_vlan *)*trunk_vlan_count);
         if(vlan_trunks != NULL) {
             for (index = 0; index < trunk_vlan_count; index++) {
@@ -377,8 +371,8 @@ int ops_port_get_tag(const struct ovsrec_port *port_row)
     int vlan_id = 0;
 
     if (port_row != NULL) {
-        if (port_row->tag != NULL) {
-            vlan_id = *port_row->tag;
+        if (port_row->vlan_tag != NULL) {
+            vlan_id = port_row->vlan_tag->id;
         }
     }
 
@@ -401,9 +395,11 @@ int ops_port_get_trunks(const struct ovsrec_port *port_row,
     int vlan_id = 0;
 
     if (port_row != NULL) {
-        if ((index >= 0) && (index < port_row->n_trunks)) {
-            if (port_row->trunks != NULL) {
-                vlan_id = port_row->trunks[index];
+        if ((index >= 0) && (index < port_row->n_vlan_trunks)) {
+            if (port_row->vlan_trunks != NULL) {
+                if (port_row->vlan_trunks[index] != NULL) {
+                    vlan_id = port_row->vlan_trunks[index]->id;
+                }
             }
         }
     }
@@ -424,7 +420,9 @@ int ops_mac_get_vlan(const struct ovsrec_mac *mac_row)
     int vlan_id = 0;
 
     if (mac_row != NULL) {
-        vlan_id = mac_row->vlan;
+        if (mac_row->mac_vlan != NULL) {
+            vlan_id = mac_row->mac_vlan->id;
+        }
     }
 
     return vlan_id;
