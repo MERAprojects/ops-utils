@@ -293,7 +293,7 @@ static bool vrf_perform_socket_operation (struct nlutils_op_data *tdata)
     int err_no;
     pthread_t tid;
 
-    if (!(err_no = pthread_create(&tid, NULL, vrfThread, (void *)&tdata))) {
+    if (!(err_no = pthread_create(&tid, NULL, vrfThread, (void *)tdata))) {
         pthread_join(tid, NULL);
     } else {
         VLOG_ERR("thread create failed with error code %d", err_no);
