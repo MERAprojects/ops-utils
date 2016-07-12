@@ -341,12 +341,10 @@ bool ops_mac_set_vlan(int64_t vlan_id,
             vlan_row = (const struct ovsrec_vlan *)
                         ops_get_vlan_by_id(vlan_id, idl);
             if(vlan_row != NULL) {
-                ovsrec_mac_set_vlan(mac_row, vlan_id);
                 ret_val = true;
             }
         }
         else {
-            ovsrec_mac_set_vlan(mac_row, vlan_id);
             ret_val = true;
         }
 
