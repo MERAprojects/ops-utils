@@ -250,6 +250,19 @@ int ops_mac_get_vlan(const struct ovsrec_mac *mac_row);
 const struct ovsrec_vlan * ops_get_vlan_by_id(int vlan_id,
                                               struct ovsdb_idl *idl);
 
+/*****************************************************************************
+sends a ICMP_ECHO packet to the target.
+ @param[in] target: ipv4 address string of the target to ping
+ @return void
+******************************************************************************/
+extern void ping4(const char *target);
+
+/*****************************************************************************
+sends a ICMP6_ECHO_REQUEST packet to the target.
+ @param[in] target: ipv6 address string of the target to ping
+ @return void
+******************************************************************************/
+extern void ping6(const char *target);
 #endif /* __OPS_UTILS_H_ */
 /** @} end of group ops_utils_public */
 /** @} end of group ops_utils */

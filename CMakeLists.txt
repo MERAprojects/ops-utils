@@ -27,7 +27,7 @@ pkg_check_modules(OVSDB REQUIRED libovsdb)
 
 # Source files to build ops-utils library
 set (SOURCES ${SRC_DIR}/ops-utils.c ${SRC_DIR}/vrf-utils.c
-     ${SRC_DIR}/l3-utils.c)
+     ${SRC_DIR}/l3-utils.c ${SRC_DIR}/ping-send.c)
 
 include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/${INCL_DIR}
                      ${OVSCOMMON_INCLUDE_DIRS}
