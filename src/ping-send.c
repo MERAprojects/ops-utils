@@ -115,7 +115,7 @@ void ping4(const char *target)
     pckt.hdr.un.echo.sequence = 1;
     pckt.hdr.checksum = checksum(&pckt, sizeof(pckt));
 
-    if ( sendto(pingsock, &pckt, sizeof(pckt), 0,
+    if ( sendto(pingsock, &pckt, sizeof(pckt), MSG_DONTWAIT,
                  (struct sockaddr*)&pingaddr, sizeof(pingaddr)) <= 0 ){
         VLOG_ERR("error:sendto: errstr = %s",strerror(errno) );
         return;
@@ -155,7 +155,7 @@ void ping6(const char *target)
     setsockopt(pingsock, SOL_RAW, IPV6_CHECKSUM, (char *) &sockopt,
                sizeof(sockopt));
 
-    c = sendto(pingsock, packet, sizeof(packet), 0,
+    c = sendto(pingsock, packet, sizeof(packet), MSG_DONTWAIT,
                (struct sockaddr *) &pingaddr, sizeof(struct sockaddr_in6));
 
     if (c < 0 )
