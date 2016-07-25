@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 #include "openvswitch/vlog.h"
 #include "ops-utils.h"
 
@@ -99,6 +100,7 @@ void ping4(const char *target)
     }
     if ( setsockopt(pingsock, SOL_IP, IP_TTL, &val, sizeof(val)) != 0){
         VLOG_ERR("Set TTL option");
+        close(pingsock);
         return ;
     }
 
@@ -106,6 +108,7 @@ void ping4(const char *target)
     pingaddr.sin_family = AF_INET;
     if((err = inet_pton(AF_INET, target, &pingaddr.sin_addr)) <= 0){
         VLOG_ERR("The given target_ip_add is not valid. error: %d",err);
+        close(pingsock);
         return ;
     }
 
@@ -118,8 +121,10 @@ void ping4(const char *target)
     if ( sendto(pingsock, &pckt, sizeof(pckt), MSG_DONTWAIT,
                  (struct sockaddr*)&pingaddr, sizeof(pingaddr)) <= 0 ){
         VLOG_ERR("error:sendto: errstr = %s",strerror(errno) );
+        close(pingsock);
         return;
     }
+    close(pingsock);
 }
 
 
@@ -160,5 +165,6 @@ void ping6(const char *target)
 
     if (c < 0 )
         VLOG_ERR("error:sendto: errno = %s",strerror(errno) );
+    close(pingsock);
     return;
 }
