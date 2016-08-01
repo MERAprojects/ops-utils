@@ -87,7 +87,7 @@ static int create_icmp4_socket(void)
 /*This function sends a ICMP_ECHO packet to the target.
 * target must be a ipv4 address string.
 */
-void ping4(const char *target)
+int ping4(const char *target)
 {
     struct sockaddr_in pingaddr;
     struct packet pckt;
@@ -96,12 +96,12 @@ void ping4(const char *target)
     int err = -1;
     if((pingsock = create_icmp4_socket())< 0){
         VLOG_ERR("can not create icmp4_socket. errstr = %s",strerror(errno));
-        return;
+        return pingsock;
     }
-    if ( setsockopt(pingsock, SOL_IP, IP_TTL, &val, sizeof(val)) != 0){
+    if ((err = setsockopt(pingsock, SOL_IP, IP_TTL, &val, sizeof(val))) != 0){
         VLOG_ERR("Set TTL option");
         close(pingsock);
-        return ;
+        return err;
     }
 
     memset(&pingaddr, 0, sizeof(struct sockaddr_in));
@@ -109,7 +109,7 @@ void ping4(const char *target)
     if((err = inet_pton(AF_INET, target, &pingaddr.sin_addr)) <= 0){
         VLOG_ERR("The given target_ip_add is not valid. error: %d",err);
         close(pingsock);
-        return ;
+        return err;
     }
 
     memset(&pckt, 0, sizeof(pckt));
@@ -118,20 +118,21 @@ void ping4(const char *target)
     pckt.hdr.un.echo.sequence = 1;
     pckt.hdr.checksum = checksum(&pckt, sizeof(pckt));
 
-    if ( sendto(pingsock, &pckt, sizeof(pckt), MSG_DONTWAIT,
-                 (struct sockaddr*)&pingaddr, sizeof(pingaddr)) <= 0 ){
+    if ((err = sendto(pingsock, &pckt, sizeof(pckt), MSG_DONTWAIT,
+                 (struct sockaddr*)&pingaddr, sizeof(pingaddr))) <= 0 ){
         VLOG_ERR("error:sendto: errstr = %s",strerror(errno) );
         close(pingsock);
-        return;
+        return err;
     }
     close(pingsock);
+    return 0;
 }
 
 
 /*This function sends a ICMP6_ECHO_REQUEST packet to the target.
 * target must be the ipv6 address string.
 */
-void ping6(const char *target)
+int ping6(const char *target)
 {
     struct sockaddr_in6 pingaddr;
     struct icmp6_hdr *pkt;
@@ -142,14 +143,14 @@ void ping6(const char *target)
 
     if((pingsock = create_icmp6_socket())< 0){
         VLOG_ERR("can not create icmp6_socket. errstr = %s",strerror(errno));
-        return;
+        return pingsock;
     }
     memset(&pingaddr, 0, sizeof(struct sockaddr_in));
     pingaddr.sin6_family = AF_INET6;
 
     if((err = inet_pton(AF_INET6, target, &pingaddr.sin6_addr)) <= 0){
         VLOG_ERR("The given target_ip_add is not valid. error: %d",err);
-        return ;
+        return err;
     }
 
     pkt = (struct icmp6_hdr *) packet;
@@ -163,8 +164,10 @@ void ping6(const char *target)
     c = sendto(pingsock, packet, sizeof(packet), MSG_DONTWAIT,
                (struct sockaddr *) &pingaddr, sizeof(struct sockaddr_in6));
 
-    if (c < 0 )
+    if (c < 0 ) {
         VLOG_ERR("error:sendto: errno = %s",strerror(errno) );
-    close(pingsock);
-    return;
+        close(pingsock);
+        return c;
+    }
+    return 0;
 }

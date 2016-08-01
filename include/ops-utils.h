@@ -255,14 +255,14 @@ sends a ICMP_ECHO packet to the target.
  @param[in] target: ipv4 address string of the target to ping
  @return void
 ******************************************************************************/
-extern void ping4(const char *target);
+extern int ping4(const char *target);
 
 /*****************************************************************************
 sends a ICMP6_ECHO_REQUEST packet to the target.
  @param[in] target: ipv6 address string of the target to ping
  @return void
 ******************************************************************************/
-extern void ping6(const char *target);
+extern int ping6(const char *target);
 #endif /* __OPS_UTILS_H_ */
 /** @} end of group ops_utils_public */
 /** @} end of group ops_utils */
