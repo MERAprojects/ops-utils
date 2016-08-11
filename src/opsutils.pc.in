@@ -21,6 +21,6 @@ includedir=${prefix}/include
 Name: @CMAKE_PROJECT_NAME@
 Description: OpenSwitch utilities
 Version: @OPSUTILS_VERSION@
-Requires: systemd
+Requires.private: libovscommon libovsdb
 Libs: -L${libdir} -lopsutils
 Cflags: -I${includedir}
