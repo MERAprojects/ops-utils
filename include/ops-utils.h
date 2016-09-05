@@ -250,6 +250,104 @@ int ops_mac_get_vlan(const struct ovsrec_mac *mac_row);
 const struct ovsrec_vlan * ops_get_vlan_by_id(int vlan_id,
                                               struct ovsdb_idl *idl);
 
+/******************** OVSDB Utility ******************************************/
+
+/******************************************************************************
+ * Setter function for tag column of port table
+ *
+ * @param[in]  vlan_id  : vlan id to be set for tag column of port table
+ * @param[in]  port_row : port table record for which tag has to be set
+ * @param[in]  idl      : pointer to ovsdb handler
+ *
+ * @return true for success, else false on failure
+ *****************************************************************************/
+bool ops_port_set_tag(int vlan_id,
+                      const struct ovsrec_port *port_row,
+                      struct ovsdb_idl *idl);
+
+/******************************************************************************
+ * Setter function for trunk column of port table
+ *
+ * @param[in]  trunk_vlan_ids   : pointer to array conataining trunked VLANs
+ * @param[in]  trunk_vlan_count : count of trunk VLANs
+ * @param[in]  port_row         : port table record for which trunked VLANs
+ *                                record has to be set
+ * @param[in]  idl              : pointer to ovsdb handler
+ *
+ * @return true for success, else false on failure
+ *****************************************************************************/
+bool ops_port_set_trunks(int64_t *trunk_vlan_ids,
+                         int trunk_vlan_count,
+                         const struct ovsrec_port *port_row,
+                         struct ovsdb_idl *idl);
+
+/******************************************************************************
+ * Setter function for vlan column of mac table
+ *
+ * @param[in]  vlan_id  : vlan id to be set for vlan column in mac table
+ * @param[in]  mac_row  : mac table record for which vlan has to set
+ * @param[in]  idl      : pointer to ovsdb handler
+ *
+ * @return true for success, else false on failure
+ *****************************************************************************/
+bool ops_mac_set_vlan(int64_t vlan_id,
+                      const struct ovsrec_mac *mac_row,
+                      struct ovsdb_idl *idl);
+
+/******************************************************************************
+ * Getter function for tag column of port table
+ *
+ * @param[in]  port_row : port table record for which tag has to be fetched
+ * @param[in]  idl      : pointer to ovsdb handler
+ *
+ * @return vlan identifier
+ *****************************************************************************/
+int ops_port_get_tag(const struct ovsrec_port *port_row);
+
+/******************************************************************************
+ * Getter function for trunk column of port table
+ *
+ * @param[in]  port_row : port table record for which trunk VLAN has to be
+ *                        fetched
+ * @param[in]  index    : index of the trunked VLAN
+ *
+ * @return vlan identifier
+ *****************************************************************************/
+int ops_port_get_trunks(const struct ovsrec_port *port_row,
+                        int index);
+
+/******************************************************************************
+ * Getter function for vlan column of mac table
+ *
+ * @param[in]  port_row : mac table record for which vlan has to be fetched
+ *
+ * @return vlan identifier
+ *****************************************************************************/
+int ops_mac_get_vlan(const struct ovsrec_mac *mac_row);
+
+/******************************************************************************
+ * Setter function for tag column of port table
+ *
+ * @param[in]  vlan_id  : vlan id to be set for tag column of port table
+ *
+ * @return vlan_row for the vlan_id if found, else NULL
+ *****************************************************************************/
+const struct ovsrec_vlan * ops_get_vlan_by_id(int vlan_id,
+                                              struct ovsdb_idl *idl);
+
+/*****************************************************************************
+sends a ICMP_ECHO packet to the target.
+ @param[in] target: ipv4 address string of the target to ping
+ @return void
+******************************************************************************/
+extern int ping4(const char *target);
+
+/*****************************************************************************
+sends a ICMP6_ECHO_REQUEST packet to the target.
+ @param[in] target: ipv6 address string of the target to ping
+ @return void
+******************************************************************************/
+extern int ping6(const char *target);
 #endif /* __OPS_UTILS_H_ */
 /** @} end of group ops_utils_public */
 /** @} end of group ops_utils */
