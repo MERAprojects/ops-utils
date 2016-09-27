@@ -14,18 +14,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import ovs.dirs
-import ovs.daemon
-import ovs.db.idl
-import ovs.unixctl
-import ovs.unixctl.server
-import argparse
-import ovs.vlog
-import os
-
-global_dstn_ns = ''
-vlog = ovs.vlog.Vlog("vrf_utils")
-
 SYSTEM_TABLE = "System"
 PORT_TABLE = "Port"
 VRF_TABLE = "VRF"
@@ -34,9 +22,26 @@ DEFAULT_VRF_NAME = "vrf_default"
 SWITCH_NAMESPACE = "swns"
 NAMESPACE_NAME_PREFIX = "VRF_"
 
+def get_vrf_ns_from_name(idl, vrf_name):
+    '''
+       This function returns the namespace corresponding to the vrf.
+    '''
+    namespace = None
+
+    for ovs_rec in idl.tables[VRF_TABLE].rows.itervalues():
+         if ovs_rec.name == vrf_name:
+                table_id = ovs_rec.table_id
+                table_id = str(table_id).strip('[]')
+                if table_id == '0':
+                    namespace = SWITCH_NAMESPACE
+                else:
+                    namespace = NAMESPACE_NAME_PREFIX + str(table_id)
+
+    return namespace
+
 def  get_mgmt_ip(idl):
     '''
-    get the ip address of management interface
+       This function gets the ip address of the management interface
     '''
     mgmt_ip = None
 
@@ -50,7 +55,7 @@ def  get_mgmt_ip(idl):
 
 def extract_ip(ip):
     '''
-    extract the ip from [u'x.x.x.x/y'] format
+       This function extracts the ip address from [u'x.x.x.x/y'] format
     '''
     tmp = str(ip).split('\'')
     tmp = tmp[1].split('/')
@@ -58,9 +63,34 @@ def extract_ip(ip):
 
     return ip
 
-def get_ip_from_interface_name(idl, source_interface):
+def get_lowest_secondary_ip(ovs_rec):
     '''
-    get the ip address configured on the interface
+       This function returns the lowest secondary ipv4 address from the Port row
+    '''
+
+    secondary_ips = []
+
+    for ip in ovs_rec.ip4_address_secondary:
+        secondary_ips.append(ip)
+
+    for i in range(len(secondary_ips)):
+        secondary_ips[i] = "%3s.%3s.%3s.%3s" % tuple(secondary_ips[i].split("."))
+
+    secondary_ips.sort()
+
+    for i in range(len(secondary_ips)):
+        secondary_ips[i] = secondary_ips[i].replace(" ", "")
+
+    tmp = str(secondary_ips[0]).split('/')
+    return tmp[0]
+
+
+def get_ip_from_interface(idl, source_interface):
+    '''
+       This function returns the ip address configured on the interface.
+
+       If primary address is configured, it returns the primary address.
+       Otherwise, the lowest secondary ip address is returned.
     '''
     ip = None
 
@@ -68,83 +98,8 @@ def get_ip_from_interface_name(idl, source_interface):
         if ovs_rec.name == source_interface:
             ip = ovs_rec.ip4_address
             if len(ip) == 0:
-                return None
-            ip = extract_ip(ip)
+                ip = get_lowest_secondary_ip(ovs_rec)
+            else:
+                ip = extract_ip(ip)
 
     return ip
-
-def get_vrf_name_from_ip(idl, src_ip):
-    '''
-    get the vrf configured on the interface
-    '''
-    vrf_name = None
-
-    for ovs_rec in idl.tables[PORT_TABLE].rows.itervalues():
-        ip = ovs_rec.ip4_address
-
-        if len(ip) == 0:
-            continue
-
-        ip = extract_ip(ip)
-        if ip == src_ip:
-            vrf_id = ovs_rec.uuid
-
-            for ovs_rec in idl.tables[VRF_TABLE].rows.itervalues():
-                for port_row in ovs_rec.ports:
-
-                    if port_row.uuid == vrf_id:
-                        vrf_name = ovs_rec.name
-                        break
-    return vrf_name
-
-def get_source_interface(idl, protocol):
-    '''
-    get the source interface configured for the protocol
-    '''
-    source_interface = None
-
-    for ovs_rec in idl.tables["VRF"].rows.itervalues():
-
-        if ovs_rec.name == DEFAULT_VRF_NAME:
-            ip = ovs_rec.source_ip
-
-            source_interface = ovs_rec.source_interface
-
-            for key, value in ovs_rec.source_ip.iteritems():
-                vlog.info("IP: key = %s, value = %s \n" %(str(key), str(value)))
-
-                if key == protocol:
-                    if len(value) != 0:
-                        return value
-
-                if key == "all":
-                    if len(value) != 0:
-                        return value
-
-            for key, value in ovs_rec.source_interface.iteritems():
-
-                if key == protocol:
-                    return (extract_ip(value.ip4_address))
-
-                if key == "all":
-                    return (extract_ip(value.ip4_address))
-
-
-def get_namespace_from_vrf(idl, vrf_name):
-    '''
-    get the namespace corresponding to the VRF
-    get clarification from Krishna's team on this logic
-    '''
-
-    namespace = None
-
-    for ovs_rec in idl.tables[VRF_TABLE].rows.itervalues():
-         if ovs_rec.name == vrf_name:
-                table_id = ovs_rec.table_id
-                table_id = str(table_id).strip('[]')
-                if table_id == '0':
-                    namespace = SWITCH_NAMESPACE
-                else:
-                    namespace = NAMESPACE_NAME_PREFIX + str(table_id)
-
-    return namespace

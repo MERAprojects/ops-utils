@@ -18,5 +18,5 @@ from setuptools import setup
 setup(
     name='vrf_utils',
     version='1.0',
-    py_modules=['vrf_utils']
+    py_modules=['source_interface_utils', 'vrf_utils']
 )
